@@ -1,0 +1,43 @@
+appId: com.dlcodetutor.app
+productName: DL-Code-Tutor
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - resources/**/*
+
+extraResources:
+  - from: resources/
+    to: resources/
+    filter: ["**/*"]
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  license: LICENSE.txt
+
+mac:
+  target: dmg
+  icon: resources/icon.icns
+  category: public.app-category.developer-tools
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icon.png
+  category: Development

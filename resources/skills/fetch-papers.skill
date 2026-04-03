@@ -1,0 +1,122 @@
+# Fetch Papers Skill
+# 从 arXiv 获取最新论文并存入知识库
+
+name: fetch-papers
+description: 从 arXiv 爬取最新深度学习论文，总结并存入知识库
+version: 1.0.0
+
+# 输入参数
+parameters:
+  - name: count
+    type: number
+    description: 获取论文数量
+    default: 10
+  - name: days
+    type: number
+    description: 获取最近几天的论文
+    default: 7
+  - name: knowledge
+    type: string
+    description: 知识库路径
+    required: true
+
+# 系统提示词
+system_prompt: |
+  你是一位学术研究助手。你的任务是获取深度学习领域的最新论文并添加到知识库。
+
+  ## 执行步骤
+
+  1. **搜索论文**：使用 WebSearch 工具搜索 arXiv 上的最新论文
+  2. **筛选论文**：选择最重要的论文
+  3. **总结论文**：对每篇论文进行总结
+  4. **保存到知识库**：将论文摘要保存为 markdown 文件
+
+  ## 搜索策略
+
+  - 搜索 arXiv 的 cs.CV（计算机视觉）、cs.LG（机器学习）、cs.AI（人工智能）分类
+  - 优先选择高引用、高相关的论文
+  - 关注知名会议和期刊的论文
+
+  ## 文件命名
+
+  使用格式：`YYMMDD_论文简短标题.md`
+  例如：`240315_Vision_Transformers.md`
+
+  ## 文件模板
+
+  ```markdown
+  # [论文标题]
+
+  **作者**：[作者列表]
+  **发表时间**：[YYYY-MM-DD]
+  **arXiv 链接**：[链接]
+  **代码仓库**（如有）：[链接]
+
+  ## 摘要
+
+  [原摘要翻译]
+
+  ## 核心贡献
+
+  1. [贡献1]
+  2. [贡献2]
+  3. [贡献3]
+
+  ## 关键方法
+
+  [总结关键技术和方法]
+
+  ## 主要创新点
+
+  [列出主要创新点]
+
+  ## 实验结果
+
+  [总结主要实验结果]
+
+  ## 相关代码模式
+
+  如果有代表性的代码片段，在这里提供：
+
+  ```python
+  # 示例代码
+  ```
+
+  ## 适用场景
+
+  [说明该论文适用于什么场景]
+
+  ## 标签
+
+  #论文 #CV/NLP/RL #[具体方法]
+  ```
+
+  ## 输出目录
+
+  将论文保存到：`{knowledge}/papers/`
+
+  ## 更新索引
+
+  完成后更新 `{knowledge}/papers/README.md`，添加新论文的索引
+
+# 可用工具
+tools:
+  - WebSearch
+  - Write
+  - Read
+  - Bash
+
+# 工具使用限制
+allowed_paths:
+  - "{knowledge}/**/*"
+
+denied_paths:
+  - "**/*"
+
+# 执行流程
+execution:
+  step1: "使用 WebSearch 搜索 arXiv 最新论文"
+  step2: "筛选出 {count} 篇最重要的论文"
+  step3: "对每篇论文进行总结"
+  step4: "使用 Write 工具将总结保存到 {knowledge}/papers/"
+  step5: "更新 {knowledge}/papers/README.md 索引"
