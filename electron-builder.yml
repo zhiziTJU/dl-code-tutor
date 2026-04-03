@@ -19,6 +19,8 @@ win:
       arch:
         - x64
   icon: resources/icon.ico
+  signingHashAlgorithms:
+    - sha256
 
 nsis:
   oneClick: false
@@ -29,6 +31,7 @@ nsis:
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
   license: LICENSE.txt
+  deleteAppDataOnUninstall: true
 
 mac:
   target: dmg

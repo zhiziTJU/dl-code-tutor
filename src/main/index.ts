@@ -8,6 +8,11 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+// ES 模块中 __dirname 的 polyfill
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ==================== 类型定义 ====================
 
@@ -388,11 +393,21 @@ function createWindow(): void {
   });
 
   // 开发模式加载本地文件，生产模式加载打包后的文件
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+  if (isDev) {
+    // 尝试连接开发服务器，如果失败则加载打包文件
+    mainWindow!.loadURL('http://localhost:5173')
+      .then(() => {
+        mainWindow!.webContents.openDevTools();
+      })
+      .catch(() => {
+        // 开发服务器不可用，加载打包后的文件
+        const htmlPath = path.join(__dirname, '..', 'renderer', 'index.html');
+        mainWindow!.loadFile(htmlPath);
+      });
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    mainWindow!.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   }
 
   mainWindow.on('closed', () => {

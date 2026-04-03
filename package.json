@@ -2,7 +2,7 @@
   "name": "dl-code-tutor",
   "version": "1.0.0",
   "description": "深度学习代码导师 - AI驱动的代码分析助手",
-  "main": "dist/main.js",
+  "main": "dist/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "npm run build:main -- --watch & npm run dev:renderer",
