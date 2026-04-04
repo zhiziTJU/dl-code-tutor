@@ -3,7 +3,7 @@
  * 安全地暴露 API 给渲染进程
  */
 
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 const electronAPI = {
   // 分析相关
@@ -21,15 +21,38 @@ const electronAPI = {
   getPermissionsHistory: () => ipcRenderer.invoke('get-permissions-history'),
   clearPermissions: () => ipcRenderer.invoke('clear-permissions'),
 
+  // 进程控制
+  stopClaude: () => ipcRenderer.invoke('stop-claude'),
+  getClaudeStatus: () => ipcRenderer.invoke('get-claude-status'),
+
+  // API 配置管理
+  setApiConfig: (config: { apiKey?: string; baseUrl?: string; provider?: string; model?: string }) =>
+    ipcRenderer.invoke('set-api-config', config),
+  getApiConfig: () => ipcRenderer.invoke('get-api-config'),
+  setApiKey: (apiKey: string) => ipcRenderer.invoke('set-api-key', apiKey),
+  getApiKey: () => ipcRenderer.invoke('get-api-key'),
+
+  // 智谱AI 快捷配置
+  setZhipuConfig: (apiKey: string) =>
+    ipcRenderer.invoke('set-api-config', {
+      apiKey,
+      provider: 'zhipu',
+      baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+      model: 'glm-4.7'
+    }),
+
   // 事件监听
   onPermissionRequest: (callback: (request: any) => void) => {
-    ipcRenderer.on('permission-request', (_event, request) => callback(request));
+    ipcRenderer.on('permission-request', (_event: any, request: any) => callback(request));
   },
   respondToPermission: (response: any) => {
     ipcRenderer.send('permission-response', response);
   },
   onAnalysisProgress: (callback: (progress: string) => void) => {
-    ipcRenderer.on('analysis-progress', (_event, progress) => callback(progress));
+    ipcRenderer.on('analysis-progress', (_event: any, progress: any) => callback(progress));
+  },
+  onClaudeStatusChanged: (callback: (status: { isRunning: boolean }) => void) => {
+    ipcRenderer.on('claude-status-changed', (_event: any, status: any) => callback(status));
   }
 };
 

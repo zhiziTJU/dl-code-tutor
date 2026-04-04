@@ -8,7 +8,9 @@ import UploadSection from './components/UploadSection';
 import KnowledgeSection from './components/KnowledgeSection';
 import ResultSection from './components/ResultSection';
 import PermissionModal from './components/PermissionModal';
+import SettingsPanel from './components/SettingsPanel';
 import Footer from './components/Footer';
+import { getElectronAPI } from './utils/electron';
 import './App.css';
 
 interface PermissionRequest {
@@ -25,20 +27,22 @@ function App() {
   const [result, setResult] = useState('');
   const [progress, setProgress] = useState('');
 
+  const electron = getElectronAPI();
+
   useEffect(() => {
     // 监听权限请求
-    window.electron.onPermissionRequest((request: PermissionRequest) => {
+    electron.onPermissionRequest((request: PermissionRequest) => {
       setPendingPermission(request);
     });
 
     // 监听分析进度
-    window.electron.onAnalysisProgress((chunk: string) => {
+    electron.onAnalysisProgress((chunk: string) => {
       setProgress(prev => prev + chunk);
     });
-  }, []);
+  }, [electron]);
 
   const handlePermissionResponse = (granted: boolean) => {
-    window.electron.respondToPermission({
+    electron.respondToPermission({
       id: pendingPermission!.id,
       granted,
       remember: rememberChoice
@@ -54,8 +58,8 @@ function App() {
 
     try {
       const response = logPath
-        ? await window.electron.analyzeWithLog(filePath, logPath)
-        : await window.electron.analyzeCode(filePath);
+        ? await electron.analyzeWithLog(filePath, logPath)
+        : await electron.analyzeCode(filePath);
 
       if (response.success) {
         setResult(response.result || '');
@@ -74,6 +78,8 @@ function App() {
       <Header />
 
       <main className="main-content">
+        <SettingsPanel />
+
         <UploadSection
           onAnalyze={handleAnalyze}
           isAnalyzing={isAnalyzing}
@@ -88,7 +94,7 @@ function App() {
       </main>
 
       <Footer onClearPermissions={async () => {
-        await window.electron.clearPermissions();
+        await electron.clearPermissions();
       }} />
 
       {pendingPermission && (

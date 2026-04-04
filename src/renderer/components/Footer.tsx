@@ -3,9 +3,11 @@
  */
 
 import { useState } from 'react';
+import { getElectronAPI } from '../utils/electron';
 
 export default function Footer({ onClearPermissions }: { onClearPermissions: () => void }) {
   const [showMenu, setShowMenu] = useState(false);
+  const electron = getElectronAPI();
 
   return (
     <footer className="footer">
@@ -14,7 +16,7 @@ export default function Footer({ onClearPermissions }: { onClearPermissions: () 
       </p>
 
       <div className="footer-links">
-        <button onClick={() => window.electron.openKnowledgeFolder()}>
+        <button onClick={() => electron.openKnowledgeFolder()}>
           打开知识库文件夹
         </button>
         <span className="separator">|</span>
