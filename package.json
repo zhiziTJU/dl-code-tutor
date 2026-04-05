@@ -55,14 +55,27 @@
       "buildResources": "resources"
     },
     "files": [
-      "dist/**/*",
-      "resources/**/*"
+      "dist/main/**/*",
+      "dist/renderer/**/*",
+      "dist/preload/**/*",
+      "package.json",
+      "resources/**/*",
+      "!resources/knowledge/papers/**/*",
+      "!resources/knowledge/papers",
+      "!dist/win-unpacked/**/*",
+      "!dist/*.exe",
+      "!dist/*.blockmap",
+      "!dist/*.yml"
     ],
     "extraResources": [
       {
         "from": "resources/",
         "to": "resources/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*",
+          "!knowledge/papers/**/*",
+          "!knowledge/papers"
+        ]
       }
     ],
     "win": {
