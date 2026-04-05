@@ -57,16 +57,18 @@ The app uses `ipcRenderer.invoke()` for request-response and `ipcRenderer.on()` 
 - `clear-permissions()` - Clear stored permissions
 - `stop-claude()` - Stop the currently running Claude process
 - `get-claude-status()` - Get Claude running status and API config status
-- `set-api-config(config)` - Set API configuration (apiKey, baseUrl, provider)
+- `set-api-config(config)` - Set API configuration (apiKey, baseUrl, provider, model)
 - `get-api-config()` - Get API configuration (key is masked for security)
 - `set-api-key(key)` - Set API key (legacy, use set-api-config)
 - `get-api-key()` - Get API key masked (legacy, use get-api-config)
 
+**Convenience helpers (available via `window.electron`):**
+- `setZhipuConfig(apiKey)` - Quick setup for Zhipu AI (sets provider='zhipu', baseUrl='https://open.bigmodel.cn/api/anthropic', model='glm-4.7')
+
 **From main to renderer (events):**
 - `permission-request` - Request user permission to access a file
-- `analysis-progress` - Stream Claude analysis output
+- `analysis-progress` - Stream Claude analysis output as text chunks
 - `claude-status-changed` - Notify when Claude process starts/stops (`{ isRunning: boolean }`)
-- `token-usage-update` - Update token usage during analysis (`{ tokens: number }`)
 
 ### Data Directory Structure
 
@@ -233,7 +235,8 @@ When modifying packaging settings, update both files to maintain consistency.
 - When Claude runs, it operates within `WORKSPACE_DIR` with restricted access via custom environment variables (`CLAUDE_CONFIG_DIR`, `CLAUDE_SKILLS_PATH`)
 - The app uses a custom `app://` protocol handler in production mode to serve the renderer files
 - Claude process stdin is closed after 5 seconds to allow time for permission requests (the `--dangerously-skip-permissions` flag is used to bypass Claude's own permission system since the app handles permissions at the UI level)
-- Analysis timeout is set to 5 minutes; the process is killed if it exceeds this limit
+- Analysis timeout is hardcoded to 5 minutes (5 * 60 * 1000 ms); the process is killed if it exceeds this limit. Timeout handling: if output > 100 chars, treats as success; otherwise, fails with timeout error
+- The app deletes user data on uninstall (`deleteAppDataOnUninstall: true` in electron-builder.yml)
 
 ## Windows-Specific Details
 
