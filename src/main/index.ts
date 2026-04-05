@@ -8,6 +8,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import https from 'https';
 import { fileURLToPath } from 'url';
 
 // ES 模块中 __dirname 的 polyfill
@@ -1128,52 +1129,275 @@ function getExistingPapers(): string[] {
 }
 
 /**
- * 爬取论文
+ * 爬取论文 - 使用 arXiv API 直接获取
  */
-ipcMain.handle('fetch-papers', async (_event, count: number = 10, days: number = 7) => {
+ipcMain.handle('fetch-papers', async (_event, count: number = 5, days: number = 7) => {
   try {
-    // 获取现有论文列表，防止重复
+    console.log('[FetchPapers] Starting arXiv paper fetch...');
+    console.log('[FetchPapers] Request params:', { count, days });
+
+    // 获取现有论文列表用于去重
     const existingPapers = getExistingPapers();
+    const existingSet = new Set(existingPapers.map(p => p.toLowerCase()));
     console.log('[FetchPapers] Existing papers:', existingPapers.length);
 
-    // 优化：只发送论文数量和几个示例，而不是完整列表
-    // 让 AI 通过检查文件来判断是否重复
-    const samplePapers = existingPapers.slice(0, 5);
-    const sampleStr = samplePapers.length > 0
-      ? samplePapers.map(p => `- ${p}`).join('\n')
-      : '(无)';
+    // 构建 arXiv API 查询
+    // 注意：arXiv API 的日期过滤有 bug，我们在客户端过滤
+    const categories = ['cs.CV', 'cs.LG', 'cs.AI', 'cs.CL', 'cs.NE', 'cs.RO'];
+    const searchQuery = categories.map(cat => `cat:${cat}`).join('+OR+');
+    const maxResults = Math.min(count * 3, 30); // 多获取一些，过滤后保留需要的数量
 
-    // 直接使用自然语言描述任务，不依赖skill系统
-    const prompt = `请帮我完成以下任务：
+    const apiUrl = `https://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
 
-**重要：请使用中文进行所有输出和文件内容。**
+    console.log('[FetchPapers] Fetching from arXiv API...');
 
-1. 使用 WebSearch 工具搜索 arXiv 上最近 ${days} 天的深度学习论文（关键词：deep learning, neural network, computer vision, NLP）
-2. 选择 ${count} 篇最重要的论文
+    // 请求 arXiv API
+    const papers = await fetchArXivPapers(apiUrl, days);
+    console.log('[FetchPapers] Fetched', papers.length, 'papers from arXiv');
 
-3. **重要：跳过已经存在于知识库中的论文**
-   知识库目录：${KNOWLEDGE_DIR}/papers/
-   现有论文数量：${existingPapers.length} 篇
-   示例论文（前5篇）：
-${sampleStr}
-   （请通过查看目录中的文件来判断论文是否已存在，不要依赖此列表）
-
-4. 对每篇新论文进行总结，包含：标题、作者、摘要（翻译成中文）、核心贡献
-5. 将每篇论文的总结保存为独立的 markdown 文件到：${KNOWLEDGE_DIR}/papers/
-6. 文件命名格式：YYMMDD_论文标题.md（如：260403_Transformer_Improvements.md）
-7. 更新 ${KNOWLEDGE_DIR}/papers/README.md 文件，在末尾添加新论文的索引
-
-请开始执行任务。只保存新论文，不要重复保存已存在的论文。所有摘要和总结请使用中文。`;
-
-    const result = await runClaudeAnalysis({
-      skill: 'general',  // 使用通用模式
-      customPrompt: prompt
+    // 过滤并去重
+    const newPapers = papers.filter(paper => {
+      const titleLower = paper.title.toLowerCase();
+      // 检查是否已存在
+      return !existingSet.has(titleLower);
     });
-    return { success: true, result };
+
+    console.log('[FetchPapers] After dedup:', newPapers.length, 'new papers');
+
+    // 限制数量
+    const papersToProcess = newPapers.slice(0, count);
+    console.log('[FetchPapers] Processing', papersToProcess.length, 'papers');
+
+    // 为每篇论文生成 AI 友好的摘要
+    const results = [];
+    for (const paper of papersToProcess) {
+      try {
+        const summary = await generatePaperSummary(paper);
+        const fileName = savePaperToFile(paper, summary);
+        results.push({ title: paper.title, file: fileName });
+        console.log('[FetchPapers] Saved:', paper.title.substring(0, 50));
+      } catch (error) {
+        console.error('[FetchPapers] Failed to process paper:', paper.title, error);
+      }
+    }
+
+    // 更新索引
+    updatePapersIndex();
+
+    const message = `论文获取完成！
+
+获取到 ${papers.length} 篇论文
+跳过重复 ${papers.length - newPapers.length} 篇
+成功保存 ${results.length} 篇新论文
+
+新增论文：
+${results.map(r => `- ${r.title}`).join('\n')}`;
+
+    return { success: true, result: message };
   } catch (error) {
+    console.error('[FetchPapers] Error:', error);
     return { success: false, error: (error as Error).message };
   }
 });
+
+/**
+ * 从 arXiv API 获取论文数据
+ */
+async function fetchArXivPapers(apiUrl: string, days: number): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    https.get(apiUrl, (res: any) => {
+      let data = '';
+      res.on('data', (chunk: any) => data += chunk);
+      res.on('end', () => {
+        try {
+          const papers = parseArXivXML(data, days);
+          resolve(papers);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+/**
+ * 解析 arXiv XML 响应
+ */
+function parseArXivXML(xmlString: string, days: number): any[] {
+  const papers: any[] = [];
+  const entries = xmlString.split('<entry>').slice(1);
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  for (const entry of entries) {
+    try {
+      const titleMatch = entry.match(/<title>(.*?)<\/title>/i);
+      const idMatch = entry.match(/<id>(.*?)<\/id>/i);
+      const summaryMatch = entry.match(/<summary>(.*?)<\/summary>/i);
+      const publishedMatch = entry.match(/<published>(.*?)<\/published>/i);
+      const authors: string[] = [];
+      const authorMatches = entry.matchAll(/<name>(.*?)<\/name>/gi);
+      for (const match of authorMatches) {
+        authors.push(match[1]);
+      }
+      const categories: string[] = [];
+      const catMatches = entry.matchAll(/<category\s+[^>]*term=["']([^"']+)["']/gi);
+      for (const match of catMatches) {
+        categories.push(match[1]);
+      }
+
+      if (!titleMatch || !idMatch) continue;
+
+      const publishedDate = publishedMatch ? new Date(publishedMatch[1]) : new Date();
+
+      // 客户端日期过滤
+      if (publishedDate < cutoffDate) continue;
+
+      papers.push({
+        id: idMatch[1],
+        title: titleMatch[1].replace(/\s+/g, ' ').trim(),
+        summary: summaryMatch ? summaryMatch[1].replace(/\s+/g, ' ').trim() : '',
+        authors: authors,
+        publishedDate: publishedDate.toISOString().split('T')[0],
+        categories: categories
+      });
+    } catch (error) {
+      console.warn('[Parse] Failed to parse entry:', error);
+    }
+  }
+
+  return papers;
+}
+
+/**
+ * 为论文生成 AI 友好的中文摘要
+ */
+async function generatePaperSummary(paper: any): Promise<string> {
+  const prompt = `请将以下论文信息转换为 Claude 友好的中文摘要格式，用于代码分析参考：
+
+**论文信息**
+- 标题：${paper.title}
+- 作者：${paper.authors.join(', ')}
+- 摘要：${paper.summary}
+- 发表日期：${paper.publishedDate}
+- 分类：${paper.categories.join(', ')}
+
+**要求**
+1. 翻译摘要为中文
+2. 提取 3-5 个核心贡献点
+3. 提取 2-3 个关键技术/方法
+4. 列出相关关键词和标签
+5. 说明代码实现时的注意事项
+
+**输出格式**（严格遵守）：
+
+# ${paper.title}
+
+**元数据**
+- arXiv ID: ${paper.id.split('/').pop()}
+- 作者: ${paper.authors.slice(0, 3).join(', ')}${paper.authors.length > 3 ? ' 等' : ''}
+- 发表: ${paper.publishedDate}
+- 领域: ${paper.categories[0] || 'cs.AI'}
+
+**中文概述**
+[1-2句话概括论文解决的问题]
+
+**核心贡献**
+1. [贡献点1]
+2. [贡献点2]
+3. [贡献点3]
+
+**关键技术/方法**
+- [技术1]: [简要说明]
+- [技术2]: [简要说明]
+
+**代码实现要点**
+- 如果用户代码中用到此技术，需要注意：
+  - [要点1]
+  - [要点2]
+
+**常见错误/陷阱**
+- [新手在实现时容易犯的错误]
+
+**标签**
+#深度学习 #${paper.categories[0]?.replace('cs.', '').toLowerCase() || 'AI'} #[其他相关标签]
+
+---
+
+请按照上述格式输出，只输出格式化后的内容，不要有任何额外说明。`;
+
+  const result = await runClaudeAnalysis({
+    skill: 'general',
+    customPrompt: prompt
+  });
+
+  return result;
+}
+
+/**
+ * 保存论文到文件
+ */
+function savePaperToFile(paper: any, summary: string): string {
+  const date = new Date();
+  const yy = date.getFullYear().toString().slice(2);
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0');
+  const dd = date.getDate().toString().padStart(2, '0');
+
+  // 生成安全的文件名
+  let safeTitle = paper.title
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
+    .substring(0, 50);
+
+  const fileName = `${yy}${mm}${dd}_${safeTitle}.md`;
+  const filePath = path.join(KNOWLEDGE_DIR, 'papers', fileName);
+
+  // 写入文件
+  fs.writeFileSync(filePath, summary, 'utf-8');
+
+  return fileName;
+}
+
+/**
+ * 更新论文索引
+ */
+function updatePapersIndex(): void {
+  const papersDir = path.join(KNOWLEDGE_DIR, 'papers');
+  const files = fs.readdirSync(papersDir).filter(f =>
+    f.endsWith('.md') && f.toLowerCase() !== 'readme.md'
+  );
+
+  const index = `# 论文知识库索引
+
+**更新时间**: ${new Date().toLocaleString('zh-CN')}
+
+**论文总数**: ${files.length}
+
+---
+
+## 最新论文
+
+${files.slice(-10).reverse().map(f => {
+  const content = fs.readFileSync(path.join(papersDir, f), 'utf-8');
+  const titleMatch = content.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1] : f;
+  return `- [${title}](${f})`;
+}).join('\n')}
+
+---
+
+## 所有论文
+
+${files.map(f => {
+  const content = fs.readFileSync(path.join(papersDir, f), 'utf-8');
+  const titleMatch = content.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1] : f;
+  return `- [${title}](${f})`;
+}).join('\n')}
+`;
+
+  fs.writeFileSync(path.join(papersDir, 'README.md'), index, 'utf-8');
+}
 
 /**
  * 获取知识库状态
